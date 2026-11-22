@@ -1,0 +1,4 @@
+node_modules/
+data/votes.json
+data/*.tmp
+.DS_Store

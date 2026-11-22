@@ -1,0 +1,8 @@
+[
+  {
+    "id": "q1",
+    "title": "どっちがオシャレ？",
+    "a": { "label": "A：ブルーニット×デニムショーツ", "image": "/images/outfit-a.png" },
+    "b": { "label": "B：ネイビージャケット×ミディスカート", "image": "/images/outfit-b.png" }
+  }
+]

@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>集計結果</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="brand">WEALY</div>
+      <a class="progress" href="/api/export.csv">CSVダウンロード</a>
+    </header>
+    <h1>集計結果</h1>
+    <p class="sub">10秒ごとに自動更新されます</p>
+    <div class="summary" id="summary"></div>
+    <main id="app"></main>
+    <div class="actions"><a class="btn dark" href="/">アンケートに戻る</a></div>
+  </div>
+
+  <script>
+    function esc(s) {
+      return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+    const pct = (n, t) => (t ? Math.round((n / t) * 100) : 0);
+
+    async function load() {
+      const data = await fetch('/api/results').then((r) => r.json());
+      const totalVotes = data.questions.reduce((s, q) => s + q.total, 0);
+      document.getElementById('summary').innerHTML = `
+        <div class="stat"><div class="num">${data.respondents}</div><div class="cap">回答者数</div></div>
+        <div class="stat"><div class="num">${totalVotes}</div><div class="cap">総投票数</div></div>`;
+
+      document.getElementById('app').innerHTML = data.questions.map((q) => {
+        const pa = pct(q.counts.a, q.total);
+        const pb = q.total ? 100 - pa : 0;
+        const winner = q.counts.a === q.counts.b ? null : q.counts.a > q.counts.b ? 'a' : 'b';
+        const side = (k) => `
+          <div class="side">
+            ${q.total && winner === k ? '<span class="winner-tag">👑 WIN</span>' : ''}
+            <img src="${esc(q[k].image)}" alt="${esc(q[k].label)}" />
+          </div>`;
+        return `
+          <section class="result">
+            <h2>${esc(q.title)}</h2>
+            <div class="pair">${side('a')}${side('b')}</div>
+            ${q.total ? `
+              <div class="bar">
+                <div class="a" style="width:${pa}%">${pa ? `${pa}%` : ''}</div>
+                <div class="b" style="width:${pb}%">${pb ? `${pb}%` : ''}</div>
+              </div>
+              <div class="legend"><span>${q.counts.a}票</span><span>${q.counts.b}票</span></div>`
+            : '<p class="empty">まだ投票がありません</p>'}
+          </section>`;
+      }).join('');
+    }
+
+    load();
+    setInterval(load, 10000);
+  </script>
+</body>
+</html>

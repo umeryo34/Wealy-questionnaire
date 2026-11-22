@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>オシャレ投票</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body class="kiosk">
+  <div class="wrap">
+    <header>
+      <div class="brand">WEALY</div>
+      <div class="progress" id="progress"></div>
+    </header>
+    <main id="app"></main>
+  </div>
+
+  <script>
+    const app = document.getElementById('app');
+    const progress = document.getElementById('progress');
+
+    // 1台のタブレットを回して使うので、投票ごとに新しい回答者IDを作る
+    // （http:// の LAN アクセスでは crypto.randomUUID が使えないため自前で生成）
+    function newRespondentId() {
+      return Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+    }
+
+    let questions = [];
+    let index = 0;
+    let answers = {};
+    let resetTimer = null;
+
+    function restart() {
+      clearTimeout(resetTimer);
+      index = 0;
+      answers = {};
+      renderQuestion();
+      window.scrollTo(0, 0);
+    }
+
+    function esc(s) {
+      return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
+    function renderQuestion() {
+      const q = questions[index];
+      progress.textContent = `${index + 1} / ${questions.length}`;
+      const isLast = index === questions.length - 1;
+      app.innerHTML = `
+        <h1>${esc(q.title)}</h1>
+        <p class="sub">オシャレだと思う方をタップしてください</p>
+        <div class="pair">
+          ${['a', 'b'].map((k) => `
+            <button class="option ${answers[q.id] === k ? 'selected' : ''}" data-choice="${k}">
+              <img src="${esc(q[k].image)}" alt="${esc(q[k].label)}" />
+            </button>`).join('')}
+        </div>
+        <div class="actions">
+          ${index > 0 ? '<button class="btn dark" id="back">戻る</button>' : ''}
+          <button class="btn" id="next" ${answers[q.id] ? '' : 'disabled'}>${isLast ? '投票する' : '次へ'}</button>
+        </div>`;
+
+      app.querySelectorAll('.option').forEach((el) =>
+        el.addEventListener('click', () => {
+          answers[q.id] = el.dataset.choice;
+          renderQuestion();
+        })
+      );
+      document.getElementById('next').addEventListener('click', () => {
+        if (isLast) submit();
+        else { index++; renderQuestion(); }
+      });
+      const back = document.getElementById('back');
+      if (back) back.addEventListener('click', () => { index--; renderQuestion(); });
+    }
+
+    async function submit() {
+      const next = document.getElementById('next');
+      next.disabled = true;
+      next.textContent = '送信中…';
+      try {
+        const res = await fetch('/api/votes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ respondentId: newRespondentId(), answers }),
+        });
+        if (!res.ok) throw new Error();
+        progress.textContent = '';
+        let left = 5;
+        app.innerHTML = `
+          <div class="center done">
+            <div class="emoji">✨</div>
+            <h1>投票ありがとうございました！</h1>
+            <p class="sub"><span id="count">${left}</span>秒後に次の人の画面に戻ります</p>
+            <div class="actions"><button class="btn" id="again">次の人へ</button></div>
+          </div>`;
+        document.getElementById('again').addEventListener('click', restart);
+        const tick = () => {
+          left--;
+          if (left <= 0) return restart();
+          const c = document.getElementById('count');
+          if (c) c.textContent = left;
+          resetTimer = setTimeout(tick, 1000);
+        };
+        resetTimer = setTimeout(tick, 1000);
+      } catch {
+        next.disabled = false;
+        next.textContent = '投票する';
+        const err = document.getElementById('error') || Object.assign(document.createElement('p'), { id: 'error', className: 'empty' });
+        err.textContent = '送信できませんでした。Wi-Fiとサーバーを確認して、もう一度押してください。';
+        app.appendChild(err);
+      }
+    }
+
+    fetch('/api/questions')
+      .then((r) => r.json())
+      .then((qs) => { questions = qs; renderQuestion(); })
+      .catch(() => { app.innerHTML = '<p class="empty">読み込みに失敗しました</p>'; });
+  </script>
+</body>
+</html>
